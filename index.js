@@ -1,6 +1,7 @@
-const { Client, LocalAuth } = require('whatsapp-web.js');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const express = require('express');
-const axios   = require('axios');
+const axios = require('axios');
+const pino = require('pino');
 
 const app = express();
 app.use(express.json());
@@ -11,46 +12,104 @@ const CLOUD_URL        = 'https://remon1810.pythonanywhere.com';
 let status  = 'loading';  // loading | qr | authenticated | ready | disconnected
 let currentQR = null;
 
-const client = new Client({
-    authStrategy: new LocalAuth(),
-    authTimeoutMs: 60000,
-    puppeteer: {
-        headless: true,
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--single-process',
-            '--no-zygote'
-        ]
-    }
-});
+async function connectToWhatsApp() {
+    // Session data-வை சேமிக்க
+    const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
 
-client.on('qr', (qr) => {
-    if (status === 'authenticated' || status === 'ready') return;
-    status    = 'qr';
-    currentQR = 'https://api.qrserver.com/v1/create-qr-code/?margin=20&size=400x400&data='
-                + encodeURIComponent(qr);
-    console.log('🔗 QR Ready!');
-});
+    const sock = makeWASocket({
+        auth: state,
+        printQRInTerminal: true,
+        logger: pino({ level: 'silent' }) // தேவையற்ற லாக்ஸை மறைக்க
+    });
 
-client.on('authenticated', () => {
-    status    = 'authenticated';
-    currentQR = null;
-    console.log('✅ Authenticated!');
-});
+    sock.ev.on('connection.update', async (update) => {
+        const { connection, lastDisconnect, qr } = update;
 
-client.on('ready', () => {
-    status    = 'ready';
-    currentQR = null;
-    console.log('✅ Bot Ready!');
-});
+        if (qr) {
+            status = 'qr';
+            currentQR = 'https://api.qrserver.com/v1/create-qr-code/?margin=20&size=400x400&data=' 
+                        + encodeURIComponent(qr);
+            console.log('🔗 QR Ready!');
+        }
 
-client.on('disconnected', () => {
-    status    = 'disconnected';
-    currentQR = null;
-    console.log('❌ Disconnected!');
-});
+        if (connection === 'connecting') {
+            status = 'authenticated';
+            console.log('⏳ Connecting...');
+        }
+
+        if (connection === 'open') {
+            status = 'ready';
+            currentQR = null;
+            console.log('✅ Bot Ready!');
+        }
+
+        if (connection === 'close') {
+            const shouldReconnect = lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
+            console.log('❌ Disconnected! Reconnecting:', shouldReconnect);
+            status = 'disconnected';
+            
+            if (shouldReconnect) {
+                setTimeout(connectToWhatsApp, 5000);
+            } else {
+                console.log('Logged out. Please delete auth_info_baileys folder and restart.');
+            }
+        }
+    });
+
+    sock.ev.on('creds.update', saveCreds);
+
+    // Message Handler
+    sock.ev.on('messages.upsert', async (m) => {
+        const msg = m.messages[0];
+        if (!msg.message || msg.key.fromMe) return;
+
+        const from = msg.key.remoteJid;
+        if (from !== ATTENDANCE_GROUP) return;
+
+        const messageType = Object.keys(msg.message)[0];
+        let text = '';
+        let type = 'textMessage';
+
+        // Message வகை சரிபார்ப்பு
+        if (messageType === 'conversation') {
+            text = msg.message.conversation;
+        } else if (messageType === 'extendedTextMessage') {
+            text = msg.message.extendedTextMessage.text;
+        } else if (messageType === 'imageMessage') {
+            text = msg.message.imageMessage.caption || '';
+            type = 'imageMessage';
+        } else {
+            return; 
+        }
+
+        console.log('📩 Msg from:', msg.pushName, '|', text);
+
+        const payload = {
+            typeWebhook: 'incomingMessageReceived',
+            senderData: {
+                chatId:     from,
+                sender:     msg.key.participant || from,
+                senderName: msg.pushName || ''
+            },
+            messageData: {
+                typeMessage: type,
+                textMessageData: { textMessage: text },
+                fileMessageData: { caption: text, downloadUrl: '' }
+            },
+            timestamp: msg.messageTimestamp,
+            idMessage: msg.key.id
+        };
+
+        try {
+            await axios.post(`${CLOUD_URL}/webhook/whatsapp`, payload);
+            console.log('✅ Forwarded!');
+        } catch(e) {
+            console.error('❌ Error:', e.message);
+        }
+    });
+}
+
+connectToWhatsApp();
 
 // Status API
 app.get('/status', (req, res) => {
@@ -110,7 +169,6 @@ function poll() {
                 Attendance Group: Active<br>
                 Messages processing automatically.
             </p>\`;
-            // Stop polling when ready
             clearInterval(timer);
 
         } else if (data.status === 'authenticated') {
@@ -152,40 +210,6 @@ const timer = setInterval(poll, 5000);
 </body>
 </html>`);
 });
-
-// Message Handler
-client.on('message', async msg => {
-    if (msg.from !== ATTENDANCE_GROUP) return;
-    if (!['image','chat'].includes(msg.type)) return;
-
-    console.log('📩 Msg:', msg.author, '|', msg.body);
-
-    const payload = {
-        typeWebhook: 'incomingMessageReceived',
-        senderData: {
-            chatId:     msg.from,
-            sender:     msg.author || msg.from,
-            senderName: msg._data?.notifyName || ''
-        },
-        messageData: {
-            typeMessage: msg.type === 'image'
-                         ? 'imageMessage' : 'textMessage',
-            textMessageData: { textMessage: msg.body },
-            fileMessageData: { caption: msg.body, downloadUrl: '' }
-        },
-        timestamp: msg.timestamp,
-        idMessage: msg.id.id
-    };
-
-    try {
-        await axios.post(`${CLOUD_URL}/webhook/whatsapp`, payload);
-        console.log('✅ Forwarded!');
-    } catch(e) {
-        console.error('❌ Error:', e.message);
-    }
-});
-
-client.initialize();
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server on port ${PORT}`));
