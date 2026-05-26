@@ -8,7 +8,7 @@ app.use(express.json());
 // வெப்சைட்டில் காட்ட வேண்டிய HTML டிசைன்
 let qrCodeHtml = `
 <html>
-    <head><meta http-equiv="refresh" content="10"></head>
+    <head><meta http-equiv="refresh" content="60"></head>
     <body style="text-align: center; margin-top: 50px; font-family: sans-serif;">
         <h2>சர்வர் ஸ்டார்ட் ஆகிறது... 🚀</h2>
         <p>QR Code இன்னும் சில வினாடிகளில் இங்கே வரும். (இந்த பேஜ் தானாகவே Refresh ஆகும்)</p>
@@ -38,11 +38,11 @@ client.on('qr', (qr) => {
     
     qrCodeHtml = `
     <html>
-        <head><meta http-equiv="refresh" content="15"></head>
+        <head><meta http-equiv="refresh" content="60"></head>
         <body style="text-align: center; margin-top: 50px; font-family: sans-serif;">
             <h2>WhatsApp QR Code 📱</h2>
             <p>உங்க மொபைலில் WhatsApp-ஐ திறந்து இதை ஸ்கேன் செய்யவும்.</p>
-            <p style="color: red;">(இந்த பேஜ் தானாகவே 15 வினாடிகளுக்கு ஒருமுறை Refresh ஆகும்)</p>
+            <p style="color: red;">(இந்த பேஜ் தானாகவே 60 வினாடிகளுக்கு ஒருமுறை Refresh ஆகும்)</p>
             <img src="${qrUrl}" alt="QR Code" style="border: 2px solid black; padding: 10px; border-radius: 10px; width: 300px; height: 300px;" />
         </body>
     </html>
