@@ -13,10 +13,9 @@ const client = new Client({
 });
 
 client.on('qr', (qr) => {
-    console.log('கீழே உள்ள QR Code-ஐ உங்கள் WhatsApp-ல் ஸ்கேன் செய்யவும்:');
-    qrcode.generate(qr, { small: true });
+    console.log('🔗 கீழே உள்ள லிங்கை காப்பி செய்து புது Tab-ல் Open செய்து QR Code-ஐ ஸ்கேன் செய்யவும்:');
+    console.log('[https://api.qrserver.com/v1/create-qr-code/?margin=20&size=400x400&data=](https://api.qrserver.com/v1/create-qr-code/?margin=20&size=400x400&data=)' + encodeURIComponent(qr));
 });
-
 client.on('ready', () => {
     console.log('✅ WhatsApp Bot Ready! கிளவுடுடன் இணைந்துவிட்டது.');
 });
