@@ -16,10 +16,19 @@ let qrCodeHtml = `
 </html>
 `;
 
-// WhatsApp Bot Setup
 const client = new Client({
     authStrategy: new LocalAuth(),
-    puppeteer: { args: ['--no-sandbox', '--disable-setuid-sandbox'] }
+    authTimeoutMs: 60000, 
+    puppeteer: {
+        headless: true,
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--single-process',
+            '--no-zygote'
+        ]
+    }
 });
 
 // புது QR Code வரும்போது வெப்சைட்டை அப்டேட் செய்தல்
