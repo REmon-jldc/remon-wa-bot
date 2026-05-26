@@ -1,10 +1,20 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
 const express = require('express');
 const axios = require('axios');
 
 const app = express();
 app.use(express.json());
+
+// வெப்சைட்டில் காட்ட வேண்டிய HTML டிசைன்
+let qrCodeHtml = `
+<html>
+    <head><meta http-equiv="refresh" content="10"></head>
+    <body style="text-align: center; margin-top: 50px; font-family: sans-serif;">
+        <h2>சர்வர் ஸ்டார்ட் ஆகிறது... 🚀</h2>
+        <p>QR Code இன்னும் சில வினாடிகளில் இங்கே வரும். (இந்த பேஜ் தானாகவே Refresh ஆகும்)</p>
+    </body>
+</html>
+`;
 
 // WhatsApp Bot Setup
 const client = new Client({
@@ -12,12 +22,35 @@ const client = new Client({
     puppeteer: { args: ['--no-sandbox', '--disable-setuid-sandbox'] }
 });
 
+// புது QR Code வரும்போது வெப்சைட்டை அப்டேட் செய்தல்
 client.on('qr', (qr) => {
-    console.log('🔗 கீழே உள்ள லிங்கை காப்பி செய்து புது Tab-ல் Open செய்து QR Code-ஐ ஸ்கேன் செய்யவும்:');
-    console.log('[https://api.qrserver.com/v1/create-qr-code/?margin=20&size=400x400&data=](https://api.qrserver.com/v1/create-qr-code/?margin=20&size=400x400&data=)' + encodeURIComponent(qr));
+    console.log('🔗 புதிய QR Code ரெடி!');
+    const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?margin=20&size=400x400&data=' + encodeURIComponent(qr);
+    
+    qrCodeHtml = `
+    <html>
+        <head><meta http-equiv="refresh" content="15"></head>
+        <body style="text-align: center; margin-top: 50px; font-family: sans-serif;">
+            <h2>WhatsApp QR Code 📱</h2>
+            <p>உங்க மொபைலில் WhatsApp-ஐ திறந்து இதை ஸ்கேன் செய்யவும்.</p>
+            <p style="color: red;">(இந்த பேஜ் தானாகவே 15 வினாடிகளுக்கு ஒருமுறை Refresh ஆகும்)</p>
+            <img src="${qrUrl}" alt="QR Code" style="border: 2px solid black; padding: 10px; border-radius: 10px; width: 300px; height: 300px;" />
+        </body>
+    </html>
+    `;
 });
+
+// ஸ்கேன் செய்த பிறகு வெப்சைட்டை மாற்றுதல்
 client.on('ready', () => {
     console.log('✅ WhatsApp Bot Ready! கிளவுடுடன் இணைந்துவிட்டது.');
+    qrCodeHtml = `
+    <html>
+        <body style="text-align: center; margin-top: 50px; font-family: sans-serif;">
+            <h2 style="color: green;">✅ WhatsApp Bot Ready!</h2>
+            <p>கிளவுடுடன் வெற்றிகரமாக இணைந்துவிட்டது. இனிமேல் WhatsApp மெசேஜ்கள் வேலை செய்யும்!</p>
+        </body>
+    </html>
+    `;
 });
 
 // Incoming Message -> PythonAnywhere-க்கு அனுப்புதல்
@@ -27,7 +60,6 @@ client.on('message', async msg => {
     if (msg.from === groupId) {
         console.log('New Message in Group:', msg.body);
         
-        // Green API போலவே JSON தயார் செய்தல்
         const payload = {
             typeWebhook: "incomingMessageReceived",
             senderData: {
@@ -53,19 +85,10 @@ client.on('message', async msg => {
 
 client.initialize();
 
-// Local Poller-ல் இருந்து Reply அனுப்ப ஒரு API
-app.post('/send', async (req, res) => {
-    const { chatId, message } = req.body;
-    try {
-        await client.sendMessage(chatId, message);
-        res.json({ status: 'success' });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+// பிரவுசரில் வெப்சைட்டை ஓபன் செய்யும்போது காட்டுவதற்கான API
+app.get('/', (req, res) => {
+    res.send(qrCodeHtml);
 });
 
-// Server Awake (cron-job.org-க்காக)
-app.get('/', (req, res) => res.send('REmon WhatsApp Bot is Running!'));
-
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+app.listen(PORT, () => console.log(\`Server started on port \${PORT}\`));
