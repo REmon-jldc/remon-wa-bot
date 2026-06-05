@@ -2,7 +2,13 @@ const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = requi
 const express = require('express');
 const axios = require('axios');
 const pino = require('pino');
-
+function normalizeJid(jid) {
+    if (!jid) return jid;
+    if (jid.endsWith('@lid')) {
+        return jid.replace('@lid', '@s.whatsapp.net');
+    }
+    return jid;
+}
 const app = express();
 app.use(express.json());
 
@@ -88,7 +94,7 @@ async function connectToWhatsApp() {
             typeWebhook: 'incomingMessageReceived',
             senderData: {
                 chatId:     from,
-                sender:     msg.key.participant || from,
+                sender: normalizeJid(msg.key.participant || from),
                 senderName: msg.pushName || ''
             },
             messageData: {
