@@ -17,12 +17,13 @@ const CLOUD_URL        = 'https://remon1810.pythonanywhere.com';
 
 let status  = 'loading';  // loading | qr | authenticated | ready | disconnected
 let currentQR = null;
+let sock = null;
 
 async function connectToWhatsApp() {
     // Session data-வை சேமிக்க
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
 
-    const sock = makeWASocket({
+    sock = makeWASocket({
         auth: state,
         printQRInTerminal: true,
         logger: pino({ level: 'silent' }) // தேவையற்ற லாக்ஸை மறைக்க
@@ -120,6 +121,16 @@ connectToWhatsApp();
 // Status API
 app.get('/status', (req, res) => {
     res.json({ status, qr: currentQR });
+});
+app.post('/message/sendText', async (req, res) => {
+    const { jid, message } = req.body;
+    if (!sock) return res.status(503).json({ error: 'Bot not ready' });
+    try {
+        await sock.sendMessage(jid, { text: message.text });
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 // Main Page — JS polling
